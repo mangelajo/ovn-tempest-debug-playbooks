@@ -1,0 +1,85 @@
+---
+- name: Fetch logs from hosts
+  hosts: all
+  tasks:
+    - name: create package list on each host
+      shell: rpm -qa > /root/package_list.txt
+
+    - name: fetch package list
+      fetch: src=/root/package_list.txt flat=yes dest=logs/{{ ansible_hostname }}/installed-packages
+
+    - name: create local log dir
+      local_action: command mkdir -p logs/{{ ansible_hostname }}/var/log/{{ item }}
+      with_items:
+        - nova
+        - neutron
+        - openvswitch
+    - name: Fetch logs
+      synchronize: mode=pull src=/var/log/{{ item }}/ dest=logs/{{ ansible_hostname }}/var/log/{{ item }}/ delete=yes
+      with_items:
+        - nova
+        - neutron
+        - openvswitch
+
+- name: Fetch sbdb & nbdb logs
+  hosts: ovn-dbs
+  tasks:
+    - name: Fetch sbdb & nbdb logs
+      fetch: src=/home/heat-admin/{{ item }}.log flat=yes dest=logs/{{ ansible_hostname }}/{{ item }}.log
+      with_items:
+        - sbdb
+        - nbdb
+      ignore_errors: yes
+
+- name: Fetch config from nodes
+  hosts: all
+  tasks:
+    - name: create local log dir
+      local_action: command mkdir -p logs/{{ ansible_hostname }}/etc/{{ item }}
+      with_items:
+        - nova
+        - neutron
+    - name: Fetch logs
+      synchronize: mode=pull src=/etc/{{ item }}/ dest=logs/{{ ansible_hostname }}/etc/{{ item }}/ delete=yes
+      with_items:
+        - nova
+        - neutron
+
+- name: Final merge
+  hosts: localhost
+  tasks:
+    - name: merge logs
+      local_action: shell
+            mv testr.out logs/ ; \
+            mv tempest.log logs/ ; \
+            oslogmerger \
+                logs/tempest.log:TEMPEST \
+                logs/overcloud-controller-0/var/log/nova/nova-api.log:NAPI0 \
+                logs/overcloud-controller-0/var/log/nova/nova-scheduler.log:NSCHED0 \
+                logs/overcloud-controller-0/var/log/neutron/server.log:QSRV0 \
+                logs/overcloud-controller-1/var/log/nova/nova-api.log:NAPI1 \
+                logs/overcloud-controller-1/var/log/nova/nova-scheduler.log:NSCH1 \
+                logs/overcloud-controller-1/var/log/neutron/server.log:QSRV1 \
+                logs/overcloud-controller-2/var/log/nova/nova-api.log:NAPI2 \
+                logs/overcloud-controller-2/var/log/nova/nova-scheduler.log:NSCHED2 \
+                logs/overcloud-controller-2/var/log/neutron/server.log:QSRV2 \
+                logs/overcloud-novacompute-0/var/log/nova/nova-compute.log:NCMP0 \
+                logs/overcloud-novacompute-0/var/log/nova/privsep-helper.log:PRS0 \
+                logs/overcloud-novacompute-1/var/log/nova/nova-compute.log:NCMP1 \
+                logs/overcloud-novacompute-1/var/log/nova/privsep-helper.log:PRS1 \
+                logs/overcloud-novacompute-2/var/log/nova/nova-compute.log:NCMP2 \
+                logs/overcloud-novacompute-2/var/log/nova/privsep-helper.log:PRS2 \
+                logs/overcloud-controller-0/sbdb.log:SBDB \
+                logs/overcloud-controller-0/nbdb.log:NBDB \
+                > logs/merged_logs.log
+
+
+                #logs/overcloud-controller-0/var/log/nova/nova-conductor.log:NCOND0 \
+                #logs/overcloud-controller-1/var/log/nova/nova-manage.log:NMAN0 \
+                #logs/overcloud-controller-0/var/log/nova/nova-placement-api.log:NPLAC0 \
+                #logs/overcloud-controller-1/var/log/nova/nova-conductor.log:NCOND1 \
+                #logs/overcloud-controller-1/var/log/nova/nova-manage.log:NMAN1 \
+                #logs/overcloud-controller-1/var/log/nova/nova-placement-api.log:NPLAC1 \
+                #logs/overcloud-controller-2/var/log/nova/nova-conductor.log:NCOND2 \
+                #logs/overcloud-controller-2/var/log/nova/nova-manage.log:NMAN2 \
+                #logs/overcloud-controller-2/var/log/nova/nova-placement-api.log:NPLAC2 \

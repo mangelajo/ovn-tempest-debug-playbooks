@@ -1,0 +1,33 @@
+---
+- name: Truncate logs everywhere
+  hosts: all
+  tasks:
+    - name: Truncate logs
+      shell: |
+          truncate --size 0 /var/log/{{ item }}/*
+      with_items:
+        - nova
+        - neutron
+        - openvswitch
+
+- name: Truncate sbdb & nbdb logs
+  hosts: ovn-dbs
+  tasks:
+    - name: Copy ovn_monitor.sh
+      copy: src=ovn_monitor.sh dest=/root/ovn_monitor.sh
+    - name: Setup monitoring
+      shell: |
+         screen -L -d -m bash -c /root/ovn_monitor.sh
+         sleep 2 # let screen some time to detach
+      when: ovn_central is defined
+
+- name: Run local stuff
+  hosts: localhost
+  tasks:
+    - name: truncate tempest.log
+      local_action: shell
+         truncate --size 0 tempest.log
+
+    - name: truncate stuff and run ostestr
+      local_action: shell
+         ostestr -c 4 --parallel | tee testr.out #neutron TestNetworkAdvancedServerOps | tee testr.out
